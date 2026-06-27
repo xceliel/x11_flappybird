@@ -99,7 +99,7 @@ int main()
 
     GC gc = XCreateGC(display, wi, 0, NULL);
 
-    XStoreName(display, wi, "fb");
+    XStoreName(display, wi, "Flappy Bird");
 
     XSelectInput(display, wi, ExposureMask | StructureNotifyMask | KeyPressMask | KeyReleaseMask);
 
