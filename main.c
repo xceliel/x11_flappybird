@@ -12,11 +12,9 @@
 #define GREEN 0x00ee00
 #define YELLOW 0xeeee00
 
-
-
 typedef struct
 {
-    XRectangle bottom, top;
+    XRectangle bottom, top, gap;
 } PipeGroup;
 
 int intersectRect(XRectangle a, XRectangle b){
@@ -30,18 +28,13 @@ int main()
 {
     Display *display = XOpenDisplay(NULL);
     Window parent = RootWindow(display, 0);
-    double vw, vh;
     XWindowAttributes attrs;
     int score = 0;
+    Bool insideGap = False;
+    Bool scored = False;
     char *scoreBuffer = calloc(50, 1);
 
     PipeGroup pipeGroups[2];
-
-    XRectangle gap = {
-        .width = 50,
-        .height = 120,
-        .x = 0,
-        .y = 100};
 
     XRectangle ground = {
         .height = 50,
@@ -59,19 +52,36 @@ int main()
         .width = 50,
         .height = 0,
         .y = 0,
-        .x = 0};
+        .x = 0
+    };
+
+    pipeGroups[0].gap = (XRectangle){
+        .width = 1,
+        .height = 120,
+        .x = 0,
+        .y = 100
+    };
 
     pipeGroups[1].top = (XRectangle){
         .width = 50,
         .height = 0,
         .y = 0,
-        .x = 100};
+        .x = 100
+    };
 
     pipeGroups[1].bottom = (XRectangle){
         .width = 50,
         .height = 0,
         .y = 0,
-        .x = 100};
+        .x = 100
+    };
+
+    pipeGroups[1].gap = (XRectangle){
+        .width = 1,
+        .height = 120,
+        .x = 0,
+        .y = 100
+    };
 
     XRectangle player = {
         .width = 50,
@@ -89,7 +99,7 @@ int main()
 
     GC gc = XCreateGC(display, wi, 0, NULL);
 
-    XStoreName(display, wi, "Flappy Bird");
+    XStoreName(display, wi, "fb");
 
     XSelectInput(display, wi, ExposureMask | StructureNotifyMask | KeyPressMask | KeyReleaseMask);
 
@@ -114,9 +124,12 @@ int main()
  
     pipeGroups[0].bottom.x = attrs.width;
     pipeGroups[0].top.x = attrs.width;
+    pipeGroups[0].gap.x = attrs.width;
 
     pipeGroups[1].bottom.x = attrs.width + attrs.width / 2 + pipeGroups[1].bottom.width/2;
     pipeGroups[1].top.x = attrs.width + attrs.width / 2 + pipeGroups[1].top.width/2;
+    pipeGroups[1].gap.x = attrs.width + attrs.width / 2 + pipeGroups[1].top.width/2;
+
     while (1)
     {
         int i;
@@ -130,6 +143,19 @@ int main()
                 XSendEvent(display, wi, True, StructureNotifyMask, &closeWindow);
                 XFlush(display);
             }
+
+            if(insideGap && scored == False){
+                scored = True;
+                score += 1;
+            }
+
+            if(intersectRect(player, pipeGroups[i].gap)){
+                insideGap = True;
+            }
+            if(intersectRect(player, pipeGroups[0].gap) == 0 && intersectRect(player, pipeGroups[1].gap) == 0){
+                insideGap = False;
+                scored = False;
+            }
         }
 
         if (XPending(display) > 0)
@@ -140,15 +166,6 @@ int main()
             {
                 break;
             }
-
-            // if(event.type == ButtonPress){
-            //     printf("Jump\n");
-            //     KeySym key = XKeycodeToKeysym(display, event.xkey.keycode, 0);
-            //     if(key == XK_space || key == XK_Up || key == XK_w || key == XK_W){
-            //         printf("Jump\n");
-            //         pressed = True;
-            //     }
-            // }
 
             char keys[32];
 
@@ -186,9 +203,6 @@ int main()
         }
 
 
-        // if (event.type == Expose || event.type == Button1)
-        // {
-     
         XClearWindow(display, wi);
 
         // pipes
@@ -198,15 +212,18 @@ int main()
         {
             pipeGroups[i].top.x -= 1;
             pipeGroups[i].bottom.x -= 1;
+            pipeGroups[i].gap.x -= 1;
+
 
             if (pipeGroups[i].top.x < pipeGroups[i].bottom.width * -1)
             {
+                pipeGroups[i].gap.x = attrs.width;
                 pipeGroups[i].bottom.x = attrs.width;
                 pipeGroups[i].top.x = attrs.width;
             }
 
-            pipeGroups[i].top.height = gap.y;
-            pipeGroups[i].bottom.y = gap.y + gap.height;
+            pipeGroups[i].top.height = pipeGroups[i].gap.y;
+            pipeGroups[i].bottom.y = pipeGroups[i].gap.y + pipeGroups[i].gap.height;
             pipeGroups[i].bottom.height = attrs.height - pipeGroups[i].bottom.y - ground.height;
 
             XFillRectangle(display, wi, gc, pipeGroups[i].top.x, pipeGroups[i].top.y, pipeGroups[i].top.width, pipeGroups[i].top.height);
@@ -238,7 +255,6 @@ int main()
 
         vy += 1;
         player.y+=vy;
-        // }
 
         usleep(30000);
     }
