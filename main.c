@@ -4,16 +4,27 @@
 #include <X11/XKBlib.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define BROWN 0x895129
 #define BLUE 0x87ceeb
 #define GREEN 0x00ee00
 #define YELLOW 0xeeee00
 
+
+
 typedef struct
 {
     XRectangle bottom, top;
 } PipeGroup;
+
+int intersectRect(XRectangle a, XRectangle b){
+    return a.x + a.width > b.x && 
+        a.x < b.x + b.width &&
+        a.y < b.y + b.height &&
+        a.y + a.height > b.y;
+}
 
 int main()
 {
@@ -21,12 +32,14 @@ int main()
     Window parent = RootWindow(display, 0);
     double vw, vh;
     XWindowAttributes attrs;
+    int score = 0;
+    char *scoreBuffer = calloc(50, 1);
 
     PipeGroup pipeGroups[2];
 
     XRectangle gap = {
         .width = 50,
-        .height = 100,
+        .height = 120,
         .x = 0,
         .y = 100};
 
@@ -72,6 +85,7 @@ int main()
     XGetWindowAttributes(display, wi, &attrs);
 
     Atom wm_close = XInternAtom(display, "WM_DELETE_WINDOW", False);
+    Atom wm_protocols = XInternAtom(display, "WM_PROTOCOLS_WINDOW", False);
 
     GC gc = XCreateGC(display, wi, 0, NULL);
 
@@ -87,13 +101,37 @@ int main()
     XKeyEvent kevent;
     int vy = 0;
 
+    XEvent closeWindow;
+    memset(&closeWindow, 0, sizeof(closeWindow));
+    closeWindow.type = ClientMessage;
+    closeWindow.xclient.type = ClientMessage;
+    closeWindow.xclient.display = display;
+    closeWindow.xclient.window = wi;
+    closeWindow.xclient.message_type = wm_protocols;
+    closeWindow.xclient.format = 32;
+    closeWindow.xclient.data.l[0] = wm_close;
+    closeWindow.xclient.data.l[1] = CurrentTime;
+ 
     pipeGroups[0].bottom.x = attrs.width;
     pipeGroups[0].top.x = attrs.width;
 
-    pipeGroups[1].bottom.x = attrs.width / 2 - pipeGroups[1].bottom.width / 2;
-    pipeGroups[1].top.x = attrs.width / 2 - pipeGroups[1].top.width / 2;
+    pipeGroups[1].bottom.x = attrs.width + attrs.width / 2 + pipeGroups[1].bottom.width/2;
+    pipeGroups[1].top.x = attrs.width + attrs.width / 2 + pipeGroups[1].top.width/2;
     while (1)
     {
+        int i;
+        for (i = 0; i < 2; i++)
+        {
+            if(
+                intersectRect(player, pipeGroups[i].top) || 
+                intersectRect(player, pipeGroups[i].bottom) || 
+                intersectRect(player, ground)
+            ){
+                XSendEvent(display, wi, True, StructureNotifyMask, &closeWindow);
+                XFlush(display);
+            }
+        }
+
         if (XPending(display) > 0)
         {
             XNextEvent(display, &event);
@@ -150,7 +188,7 @@ int main()
 
         // if (event.type == Expose || event.type == Button1)
         // {
-        int i;
+     
         XClearWindow(display, wi);
 
         // pipes
@@ -185,6 +223,18 @@ int main()
         XSetForeground(display, gc, YELLOW);
         XFillRectangle(display, wi, gc, player.x, player.y, player.width, player.height);
         XFlush(display);
+
+        //score
+        XFontStruct *font = XLoadQueryFont(display, "-*-fixed-*-*-*-*-20-*-*-*-*-*-*-*");
+        if (!font) font = XLoadQueryFont(display, "fixed");
+        sprintf(scoreBuffer, "%d", score);
+        int width_text = XTextWidth(font, scoreBuffer, strlen(scoreBuffer));
+
+        XSetForeground(display, gc, 0x000000);
+        XSetFont(display, gc, font->fid);
+        XDrawString(display, wi, gc, attrs.width/2 - width_text/2, 50, scoreBuffer, strlen(scoreBuffer));
+        XFlush(display);
+
 
         vy += 1;
         player.y+=vy;
