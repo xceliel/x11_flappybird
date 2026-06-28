@@ -5,7 +5,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
+#include <sys/reboot.h>
 
 #define BROWN 0x895129
 #define BLUE 0x87ceeb
@@ -34,7 +34,7 @@ int intsectP(int p, int x, int y, int h)
     return 120+SIZE > x &&
            120 < x + SIZE &&
            p < y + h &&
-           p + h > y;
+           p + SIZE > y;
 }
 
 int main()
@@ -46,8 +46,6 @@ int main()
     Bool insideGap = False;
     Bool scored = False;
     char scoreBuffer[20];
-    srand(clock());
-    PipeGroup pipeGroups[2];
     int i;
 
 
@@ -60,12 +58,6 @@ int main()
     Window wi = XCreateSimpleWindow(display, parent, 0, 0, 300, 500, 0, 0, BLUE);
     XGetWindowAttributes(display, wi, &attrs);
 
-    XRectangle ground = {
-        .height = 50,
-        .width = 300,
-        .x = 0,
-        .y = 450
-    };
 
     int hrange = attrs.height - SIZE - 2*120;
     int gaps[2] = {
@@ -74,61 +66,10 @@ int main()
     };
     int pipes[2] = {
         attrs.width,
-        0
+        attrs.width + attrs.width / 2 + SIZE / 2
     };
     int p = 0;
     int vy = 0;
-
-    pipeGroups[0].gap = (XRectangle){
-        .width = 1,
-        .height = 120,
-        .x = 0,
-        .y = 60 + (rand() % hrange)
-    };
-
-    pipeGroups[1].gap = (XRectangle){
-        .width = 1,
-        .height = 120,
-        .x = 0,
-        .y = 60 + (rand() % hrange)
-    };
-
-
-    pipeGroups[0].top = (XRectangle){
-        .width = 50,
-        .height = pipeGroups[0].gap.y,
-        .y = 0,
-        .x = 0
-    };
-
-    pipeGroups[0].bottom = (XRectangle){
-        .width = 50,
-        .height = attrs.height - (pipeGroups[0].gap.y + pipeGroups[0].gap.height) - ground.height,
-        .y = pipeGroups[0].gap.y + pipeGroups[0].gap.height,
-        .x = 0
-    };
-
-
-    pipeGroups[1].top = (XRectangle){
-        .width = 50,
-        .height = pipeGroups[1].gap.y,
-        .y = 0,
-        .x = 100
-    };
-
-
-    pipeGroups[1].bottom = (XRectangle){
-        .width = 50,
-        .height = attrs.height - (pipeGroups[0].gap.y + pipeGroups[0].gap.height) - ground.height,
-        .y = pipeGroups[0].gap.y + pipeGroups[0].gap.height,
-        .x = 100
-    };
-
-    XRectangle player = {
-        .width = 50,
-        .height = 50,
-        .y = 120,
-        .x = 120};
     Bool pressed = False;
 
     Atom wm_close = XInternAtom(display, "WM_DELETE_WINDOW", False);
@@ -156,47 +97,26 @@ int main()
     closeWindow.xclient.data.l[0] = wm_close;
     closeWindow.xclient.data.l[1] = CurrentTime;
 
-    pipeGroups[0].bottom.x = attrs.width;
-    pipeGroups[0].top.x = attrs.width;
-    pipeGroups[0].gap.x = attrs.width;
-
-    pipeGroups[1].bottom.x = attrs.width + attrs.width / 2 + pipeGroups[1].bottom.width / 2;
-    pipeGroups[1].top.x = attrs.width + attrs.width / 2 + pipeGroups[1].top.width / 2;
-    pipeGroups[1].gap.x = attrs.width + attrs.width / 2 + pipeGroups[1].top.width / 2;
-
-    for (i = 0; i < 2; i++)
-    {
-        pipeGroups[i].top.x -= 2;
-        pipeGroups[i].bottom.x -= 2;
-        pipeGroups[i].gap.x -= 2;
-
-        if (pipeGroups[i].top.x < pipeGroups[i].bottom.width * -1)
-        {
-            pipeGroups[i].gap.y = 60 + (rand() % hrange);
-            pipeGroups[i].gap.x = attrs.width;
-            pipeGroups[i].bottom.x = attrs.width;
-            pipeGroups[i].top.x = attrs.width;
-        }
-
-
-        pipeGroups[i].top.height = pipeGroups[i].gap.y;
-        pipeGroups[i].bottom.y = pipeGroups[i].gap.y + pipeGroups[i].gap.height;
-        pipeGroups[i].bottom.height = attrs.height - (pipeGroups[i].gap.y + pipeGroups[i].gap.height) - ground.height;
-
-        XFillRectangle(display, wi, gc, pipeGroups[i].top.x, pipeGroups[i].top.y, pipeGroups[i].top.width, pipeGroups[i].top.height);
-        XFillRectangle(display, wi, gc, pipeGroups[i].bottom.x, pipeGroups[i].bottom.y, pipeGroups[i].bottom.width, pipeGroups[i].bottom.height);
-    }
-
     while (1)
     {
         for (i = 0; i < 2; i++)
         {
+
+
+
             if (
-                intsectP(p, pipes[i], 0, gaps[i]) ||
-                intsectP(p, pipes[i],  gaps[i]+GAP_SIZE, attrs.height-SIZE-gaps[i]-GAP_SIZE) ||
-                intsectP(p, 120, attrs.height-SIZE,SIZE))
+                intsectP(p, pipes[i], 0, gaps[i]) || // top
+                intsectP(p, pipes[i],  gaps[i]+GAP_SIZE, attrs.height-SIZE) || // bottom
+                intsectP(p, 120, attrs.height-SIZE,SIZE)) // ground
             {
+ 
                 XSendEvent(display, wi, True, StructureNotifyMask, &closeWindow);
+                
+                /* 
+                    You can put the code bellow to make it more fun:
+                    system("shutdown -h now");
+                
+                */
             }
 
             if (insideGap && scored == False)
@@ -210,8 +130,8 @@ int main()
                 insideGap = True;
             }
             if (
-                intsectP(p, pipes[0], gaps[0], GAP_SIZE) &&
-                intsectP(p, pipes[1], gaps[1], GAP_SIZE)
+                intsectP(p, pipes[0], gaps[0], GAP_SIZE) == 0  &&
+                intsectP(p, pipes[1], gaps[1], GAP_SIZE) == 0
             )
             {
                 insideGap = False;
@@ -269,24 +189,20 @@ int main()
 
         for (i = 0; i < 2; i++)
         {
-            pipeGroups[i].top.x -= 2;
-            pipeGroups[i].bottom.x -= 2;
-            pipeGroups[i].gap.x -= 2;
 
-            if (pipeGroups[i].top.x < pipeGroups[i].bottom.width * -1)
+            pipes[i] -= 2;
+
+            if (pipes[i] < SIZE * -1)
             {
-                pipeGroups[i].gap.y = 60 + (rand() % hrange);
-                pipeGroups[i].gap.x = attrs.width;
-                pipeGroups[i].bottom.x = attrs.width;
-                pipeGroups[i].top.x = attrs.width;
+                gaps[i] = 60 + (rand() % hrange);
+                pipes[i] = attrs.width;
             }
 
-            pipeGroups[i].top.height = pipeGroups[i].gap.y;
-            pipeGroups[i].bottom.y = pipeGroups[i].gap.y + pipeGroups[i].gap.height;
-            pipeGroups[i].bottom.height = attrs.height - pipeGroups[i].bottom.y - ground.height;
+            // top
+            XFillRectangle(display, wi, gc, pipes[i], 0, SIZE, gaps[i]);
 
-            XFillRectangle(display, wi, gc, pipeGroups[i].top.x, pipeGroups[i].top.y, pipeGroups[i].top.width, pipeGroups[i].top.height);
-            XFillRectangle(display, wi, gc, pipeGroups[i].bottom.x, pipeGroups[i].bottom.y, pipeGroups[i].bottom.width, pipeGroups[i].bottom.height);
+            // bottom
+            XFillRectangle(display, wi, gc, pipes[i], gaps[i]+GAP_SIZE, SIZE, attrs.height-SIZE-gaps[i]-GAP_SIZE);
         }
 
         // ground
