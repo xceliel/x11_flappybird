@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 #define BROWN 0x895129
 #define BLUE 0x87ceeb
@@ -13,6 +14,7 @@
 
 #define PIPE_WIDTH 50
 #define GAP_SIZE 150
+#define SIZE 50
 
 typedef struct
 {
@@ -27,12 +29,12 @@ int sl(char *s)
     return t - s - 1;
 }
 
-int intersectRect(XRectangle a, XRectangle b)
+int intsectP(int p, int x, int y, int h)
 {
-    return a.x + a.width > b.x &&
-           a.x < b.x + b.width &&
-           a.y < b.y + b.height &&
-           a.y + a.height > b.y;
+    return 120+SIZE > x &&
+           120 < x + SIZE &&
+           p < y + h &&
+           p + h > y;
 }
 
 int main()
@@ -44,56 +46,83 @@ int main()
     Bool insideGap = False;
     Bool scored = False;
     char scoreBuffer[20];
-
-    srand(CurrentTime);
+    srand(clock());
     PipeGroup pipeGroups[2];
     int i;
+
 
     XFontStruct *font = XLoadQueryFont(display, "-*-fixed-*-*-*-*-20-*-*-*-*-*-*-*");
     if (!font)
         font = XLoadQueryFont(display, "fixed");
 
+    Bool suports_detectable_repeat;
+    XkbSetDetectableAutoRepeat(display, True, &suports_detectable_repeat);
+    Window wi = XCreateSimpleWindow(display, parent, 0, 0, 300, 500, 0, 0, BLUE);
+    XGetWindowAttributes(display, wi, &attrs);
+
     XRectangle ground = {
         .height = 50,
         .width = 300,
         .x = 0,
-        .y = 450};
+        .y = 450
+    };
 
-    pipeGroups[0].top = (XRectangle){
-        .width = 50,
-        .height = 0,
-        .y = 0,
-        .x = 0};
-
-    pipeGroups[0].bottom = (XRectangle){
-        .width = 50,
-        .height = 0,
-        .y = 0,
-        .x = 0};
+    int hrange = attrs.height - SIZE - 2*120;
+    int gaps[2] = {
+        60 + (rand() % hrange), 
+        60 + (rand() % hrange)
+    };
+    int pipes[2] = {
+        attrs.width,
+        0
+    };
+    int p = 0;
+    int vy = 0;
 
     pipeGroups[0].gap = (XRectangle){
         .width = 1,
         .height = 120,
         .x = 0,
-        .y = 100};
-
-    pipeGroups[1].top = (XRectangle){
-        .width = 50,
-        .height = 0,
-        .y = 0,
-        .x = 100};
-
-    pipeGroups[1].bottom = (XRectangle){
-        .width = 50,
-        .height = 0,
-        .y = 0,
-        .x = 100};
+        .y = 60 + (rand() % hrange)
+    };
 
     pipeGroups[1].gap = (XRectangle){
         .width = 1,
         .height = 120,
         .x = 0,
-        .y = 100};
+        .y = 60 + (rand() % hrange)
+    };
+
+
+    pipeGroups[0].top = (XRectangle){
+        .width = 50,
+        .height = pipeGroups[0].gap.y,
+        .y = 0,
+        .x = 0
+    };
+
+    pipeGroups[0].bottom = (XRectangle){
+        .width = 50,
+        .height = attrs.height - (pipeGroups[0].gap.y + pipeGroups[0].gap.height) - ground.height,
+        .y = pipeGroups[0].gap.y + pipeGroups[0].gap.height,
+        .x = 0
+    };
+
+
+    pipeGroups[1].top = (XRectangle){
+        .width = 50,
+        .height = pipeGroups[1].gap.y,
+        .y = 0,
+        .x = 100
+    };
+
+
+    pipeGroups[1].bottom = (XRectangle){
+        .width = 50,
+        .height = attrs.height - (pipeGroups[0].gap.y + pipeGroups[0].gap.height) - ground.height,
+        .y = pipeGroups[0].gap.y + pipeGroups[0].gap.height,
+        .x = 100
+    };
 
     XRectangle player = {
         .width = 50,
@@ -101,10 +130,6 @@ int main()
         .y = 120,
         .x = 120};
     Bool pressed = False;
-    Bool suports_detectable_repeat;
-    XkbSetDetectableAutoRepeat(display, True, &suports_detectable_repeat);
-    Window wi = XCreateSimpleWindow(display, parent, 0, 0, 300, 500, 0, 0, BLUE);
-    XGetWindowAttributes(display, wi, &attrs);
 
     Atom wm_close = XInternAtom(display, "WM_DELETE_WINDOW", False);
     Atom wm_protocols = XInternAtom(display, "WM_PROTOCOLS_WINDOW", False);
@@ -119,7 +144,6 @@ int main()
     XMapWindow(display, wi);
 
     XEvent event;
-    int vy = 0;
 
     XEvent closeWindow = {0};
 
@@ -148,16 +172,16 @@ int main()
 
         if (pipeGroups[i].top.x < pipeGroups[i].bottom.width * -1)
         {
-            pipeGroups[i].gap.y = 50 + (rand() % (attrs.height - ground.height - 100));
-            printf("%d\n", pipeGroups[i].gap.y);
+            pipeGroups[i].gap.y = 60 + (rand() % hrange);
             pipeGroups[i].gap.x = attrs.width;
             pipeGroups[i].bottom.x = attrs.width;
             pipeGroups[i].top.x = attrs.width;
         }
 
+
         pipeGroups[i].top.height = pipeGroups[i].gap.y;
         pipeGroups[i].bottom.y = pipeGroups[i].gap.y + pipeGroups[i].gap.height;
-        pipeGroups[i].bottom.height = attrs.height - pipeGroups[i].bottom.y - ground.height;
+        pipeGroups[i].bottom.height = attrs.height - (pipeGroups[i].gap.y + pipeGroups[i].gap.height) - ground.height;
 
         XFillRectangle(display, wi, gc, pipeGroups[i].top.x, pipeGroups[i].top.y, pipeGroups[i].top.width, pipeGroups[i].top.height);
         XFillRectangle(display, wi, gc, pipeGroups[i].bottom.x, pipeGroups[i].bottom.y, pipeGroups[i].bottom.width, pipeGroups[i].bottom.height);
@@ -168,9 +192,9 @@ int main()
         for (i = 0; i < 2; i++)
         {
             if (
-                intersectRect(player, pipeGroups[i].top) ||
-                intersectRect(player, pipeGroups[i].bottom) ||
-                intersectRect(player, ground))
+                intsectP(p, pipes[i], 0, gaps[i]) ||
+                intsectP(p, pipes[i],  gaps[i]+GAP_SIZE, attrs.height-SIZE-gaps[i]-GAP_SIZE) ||
+                intsectP(p, 120, attrs.height-SIZE,SIZE))
             {
                 XSendEvent(display, wi, True, StructureNotifyMask, &closeWindow);
             }
@@ -181,11 +205,14 @@ int main()
                 score += 1;
             }
 
-            if (intersectRect(player, pipeGroups[i].gap))
+            if (intsectP(p, pipes[i], gaps[i], GAP_SIZE))
             {
                 insideGap = True;
             }
-            if (intersectRect(player, pipeGroups[0].gap) == 0 && intersectRect(player, pipeGroups[1].gap) == 0)
+            if (
+                intsectP(p, pipes[0], gaps[0], GAP_SIZE) &&
+                intsectP(p, pipes[1], gaps[1], GAP_SIZE)
+            )
             {
                 insideGap = False;
                 scored = False;
@@ -218,7 +245,6 @@ int main()
                     if (!pressed)
                     {
                         vy = -10;
-
                         pressed = True;
                     }
                 }
@@ -249,8 +275,7 @@ int main()
 
             if (pipeGroups[i].top.x < pipeGroups[i].bottom.width * -1)
             {
-                pipeGroups[i].gap.y = 50 + (rand() % (attrs.height - ground.height - 100));
-                printf("%d\n", pipeGroups[i].gap.y);
+                pipeGroups[i].gap.y = 60 + (rand() % hrange);
                 pipeGroups[i].gap.x = attrs.width;
                 pipeGroups[i].bottom.x = attrs.width;
                 pipeGroups[i].top.x = attrs.width;
@@ -266,11 +291,11 @@ int main()
 
         // ground
         XSetForeground(display, gc, BROWN);
-        XFillRectangle(display, wi, gc, ground.x, ground.y, ground.width, ground.height);
+        XFillRectangle(display, wi, gc, 0, attrs.height-SIZE, attrs.width, SIZE);
 
         // player
         XSetForeground(display, gc, YELLOW);
-        XFillRectangle(display, wi, gc, player.x, player.y, player.width, player.height);
+        XFillRectangle(display, wi, gc, 120, p, SIZE, SIZE);
 
         // score
 
@@ -282,7 +307,7 @@ int main()
         XDrawString(display, wi, gc, attrs.width / 2 - width_text / 2, 50, scoreBuffer, sl(scoreBuffer));
 
         vy += 1;
-        player.y += vy;
+        p += vy;
 
         usleep(30000);
     }
